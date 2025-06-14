@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ResMed ASVAuto Settings Calculator</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 400px;
+    margin: 30px auto;
+    padding: 0 15px;
+  }
+  label {
+    display: block;
+    margin-top: 15px;
+    font-weight: bold;
+  }
+  input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    font-size: 1rem;
+  }
+  input[readonly] {
+    background-color: #f0f0f0;
+  }
+  #messages {
+    color: red;
+    margin-top: 15px;
+    min-height: 50px;
+    font-weight: bold;
+    display: none; /* Hidden by default */
+  }
+</style>
+</head>
+<body>
+
+<h2>ResMed ASVAuto Settings Calculator</h2>
+
+<form id="calculatorForm" onsubmit="return false;">
+  <label for="desiredMinEpap">Desired Min EPAP (cm H₂O):</label>
+  <input type="number" step="0.2" id="desiredMinEpap" min="4" max="15" placeholder="e.g. 4.0" />
+
+  <label for="desiredMaxEpap">Desired Max EPAP (cm H₂O):</label>
+  <input type="number" step="0.2" id="desiredMaxEpap" min="4" max="15" placeholder="e.g. 10.0" />
+
+  <label for="desiredMinPs">Desired Min PS (cm H₂O):</label>
+  <input type="number" step="0.1" id="desiredMinPs" min="0" max="6" placeholder="e.g. 0.0" />
+
+  <label for="desiredMaxPs">Desired Max PS (cm H₂O):</label>
+  <input type="number" step="0.1" id="desiredMaxPs" min="0" max="20" placeholder="e.g. 10.0" />
+
+  <div id="messages"></div>
+</form>
+
+<h3>Actual Machine Settings</h3>
+<label for="actualMinEpap">Actual Min EPAP:</label>
+<input type="text" id="actualMinEpap" readonly />
+
+<label for="actualMaxEpap">Actual Max EPAP:</label>
+<input type="text" id="actualMaxEpap" readonly />
+
+<label for="actualMinPs">Actual Min PS:</label>
+<input type="text" id="actualMinPs" readonly />
+
+<label for="actualMaxPs">Actual Max PS:</label>
+<input type="text" id="actualMaxPs" readonly />
+
+<script>
+  const MIN_EPAP_LIMIT = 4.0;
+  const MAX_EPAP_LIMIT = 15.0;
+  const MIN_PS_LIMIT = 0.0;
+  const MAX_PS_LIMIT = 20.0;
+  const MIN_PS_RANGE_LIMIT = 6.0;
+
+  // Helper functions
+  function ROUND_DOWN_TO_0_2(value) {
+    return Math.floor(value * 5) / 5;
+  }
+
+  function ROUND_DOWN_TO_0_1(value) {
+    return Math.floor(value * 10) / 10;
+  }
+
+  function CLAMP(value, min_val, max_val) {
+    if (value < min_val) return min_val;
+    if (value > max_val) return max_val;
+    return value;
+  }
+
+  // Validate inputs, return error messages (only for invalid numbers)
+  function validateInputs(minEpap, maxEpap, minPs, maxPs) {
+    const errors = [];
+
+    if (isNaN(minEpap)) {
+      errors.push("Please enter a number for Min EPAP.");
+    }
+
+    if (isNaN(maxEpap)) {
+      errors.push("Please enter a number for Max EPAP.");
+    }
+
+    if (isNaN(minPs)) {
+      errors.push("Please enter a number for Min PS.");
+    }
+
+    if (isNaN(maxPs)) {
+      errors.push("Please enter a number for Max PS.");
+    }
+
+    return errors;
+  }
+
+  // Check logical warnings and show what machine will do with out-of-range values
+  function checkWarnings(minEpap, maxEpap, minPs, maxPs) {
+    const warnings = [];
+
+    // Show warnings for values outside machine range
+    if (minEpap < MIN_EPAP_LIMIT) {
+      warnings.push(`Min EPAP ${minEpap.toFixed(1)} is below machine minimum. Machine will use ${MIN_EPAP_LIMIT}.`);
+    }
+    if (minEpap > MAX_EPAP_LIMIT) {
+      warnings.push(`Min EPAP ${minEpap.toFixed(1)} is above machine maximum. Machine will use ${MAX_EPAP_LIMIT}.`);
+    }
+
+    if (maxEpap < MIN_EPAP_LIMIT) {
+      warnings.push(`Max EPAP ${maxEpap.toFixed(1)} is below machine minimum. Machine will use ${MIN_EPAP_LIMIT}.`);
+    }
+    if (maxEpap > MAX_EPAP_LIMIT) {
+      warnings.push(`Max EPAP ${maxEpap.toFixed(1)} is above machine maximum. Machine will use ${MAX_EPAP_LIMIT}.`);
+    }
+
+    if (minPs < MIN_PS_LIMIT) {
+      warnings.push(`Min PS ${minPs.toFixed(1)} is below machine minimum. Machine will use ${MIN_PS_LIMIT}.`);
+    }
+    if (minPs > MIN_PS_RANGE_LIMIT) {
+      warnings.push(`Min PS ${minPs.toFixed(1)} is above machine maximum for Min PS. Machine will use ${MIN_PS_RANGE_LIMIT}.`);
+    }
+
+    if (maxPs < MIN_PS_LIMIT) {
+      warnings.push(`Max PS ${maxPs.toFixed(1)} is below machine minimum. Machine will use ${MIN_PS_LIMIT}.`);
+    }
+    if (maxPs > MAX_PS_LIMIT) {
+      warnings.push(`Max PS ${maxPs.toFixed(1)} is above machine maximum. Machine will cap as needed.`);
+    }
+
+    // Show warnings for logical conflicts
+    if (maxEpap < minEpap) {
+      warnings.push(`Max EPAP cannot be less than Min EPAP. Machine will adjust Max EPAP to match Min EPAP.`);
+    }
+
+    if (maxPs < minPs) {
+      warnings.push(`Max PS cannot be less than Min PS. Machine will adjust as needed.`);
+    }
+
+    return warnings;
+  }
+
+  // Core calculator function
+  function CALCULATE_RESMED_ASVAUTO_SETTINGS(desired_min_epap, desired_max_epap, desired_min_ps, desired_max_ps) {
+    // Step 1: Clamp and round inputs to what machine can accept
+    let actual_min_epap_pre = ROUND_DOWN_TO_0_2(CLAMP(desired_min_epap, MIN_EPAP_LIMIT, MAX_EPAP_LIMIT));
+    let actual_max_epap_pre = ROUND_DOWN_TO_0_2(CLAMP(desired_max_epap, MIN_EPAP_LIMIT, MAX_EPAP_LIMIT));
+    let actual_min_ps_pre = ROUND_DOWN_TO_0_1(CLAMP(desired_min_ps, MIN_PS_LIMIT, MIN_PS_RANGE_LIMIT));
+    let actual_max_ps_pre = ROUND_DOWN_TO_0_1(CLAMP(desired_max_ps, MIN_PS_LIMIT, MAX_PS_LIMIT));
+
+    // Step 2: Handle EPAP conflicts - machine prioritizes Min EPAP
+    if (actual_max_epap_pre < actual_min_epap_pre) {
+      actual_max_epap_pre = actual_min_epap_pre;
+    }
+
+    let actual_min_epap_final = actual_min_epap_pre;
+    let actual_max_epap_final = actual_max_epap_pre;
+
+    // Step 3: Determine PS caps based on EPAP settings (machine hardware limits)
+    let maxPsCap = MAX_PS_LIMIT; // default max cap
+    let minPsCap = MIN_PS_LIMIT; // default min
+
+    // Special rule: if both EPAP values are 15
+    if (actual_min_epap_final === 15 && actual_max_epap_final === 15) {
+      maxPsCap = 10;
+      // Min PS is also limited to 5 when EPAP is fixed at 15
+      if (actual_min_ps_pre > 5) {
+        actual_min_ps_pre = 5;
+      }
+    }
+    // Apply caps based on Min EPAP (machine limitations)
+    else if (actual_min_epap_final >= 15) {
+      maxPsCap = 10;
+    }
+    else if (actual_min_epap_final >= 12) {
+      maxPsCap = 13;
+    }
+    else if (actual_min_epap_final >= 10) {
+      maxPsCap = 15;
+    }
+
+    // Step 4: Apply PS caps - machine will limit PS to what it can actually do
+    let actual_max_ps_final = Math.min(actual_max_ps_pre, maxPsCap);
+    let actual_min_ps_final = actual_min_ps_pre;
+
+    // Step 5: Handle PS conflicts - ensure Min PS ≤ Max PS
+    if (actual_min_ps_final > actual_max_ps_final) {
+      actual_min_ps_final = actual_max_ps_final;
+    }
+
+    // Final rounding to ensure proper increments
+    actual_max_ps_final = ROUND_DOWN_TO_0_1(actual_max_ps_final);
+    actual_min_ps_final = ROUND_DOWN_TO_0_1(actual_min_ps_final);
+
+    return {
+      "Min EPAP": actual_min_epap_final.toFixed(1),
+      "Max EPAP": actual_max_epap_final.toFixed(1),
+      "Min PS": actual_min_ps_final.toFixed(1),
+      "Max PS": actual_max_ps_final.toFixed(1)
+    };
+  }
+
+  // DOM references
+  const desiredMinEpapInput = document.getElementById('desiredMinEpap');
+  const desiredMaxEpapInput = document.getElementById('desiredMaxEpap');
+  const desiredMinPsInput = document.getElementById('desiredMinPs');
+  const desiredMaxPsInput = document.getElementById('desiredMaxPs');
+  const messagesDiv = document.getElementById('messages');
+
+  const actualMinEpapOutput = document.getElementById('actualMinEpap');
+  const actualMaxEpapOutput = document.getElementById('actualMaxEpap');
+  const actualMinPsOutput = document.getElementById('actualMinPs');
+  const actualMaxPsOutput = document.getElementById('actualMaxPs');
+
+  function updateCalculator() {
+    const minEpap = parseFloat(desiredMinEpapInput.value);
+    const maxEpap = parseFloat(desiredMaxEpapInput.value);
+    const minPs = parseFloat(desiredMinPsInput.value);
+    const maxPs = parseFloat(desiredMaxPsInput.value);
+
+    messagesDiv.style.display = "none";
+    messagesDiv.innerHTML = "";
+
+    // Validate inputs first
+    const errors = validateInputs(minEpap, maxEpap, minPs, maxPs);
+    if (errors.length > 0) {
+      messagesDiv.style.display = "block";
+      messagesDiv.innerHTML = errors.join("<br>");
+      clearOutputs();
+      return;
+    }
+
+    // Check warnings (logic issues)
+    const warnings = checkWarnings(minEpap, maxEpap, minPs, maxPs);
+
+    if (warnings.length > 0) {
+      messagesDiv.style.display = "block";
+      messagesDiv.innerHTML = warnings.join("<br>");
+    }
+
+    // Calculate and show results
+    const results = CALCULATE_RESMED_ASVAUTO_SETTINGS(minEpap, maxEpap, minPs, maxPs);
+
+    actualMinEpapOutput.value = results["Min EPAP"];
+    actualMaxEpapOutput.value = results["Max EPAP"];
+    actualMinPsOutput.value = results["Min PS"];
+    actualMaxPsOutput.value = results["Max PS"];
+  }
+
+  function clearOutputs() {
+    actualMinEpapOutput.value = "";
+    actualMaxEpapOutput.value = "";
+    actualMinPsOutput.value = "";
+    actualMaxPsOutput.value = "";
+  }
+
+  // Event listeners for real-time calculation
+  desiredMinEpapInput.addEventListener('input', updateCalculator);
+  desiredMaxEpapInput.addEventListener('input', updateCalculator);
+  desiredMinPsInput.addEventListener('input', updateCalculator);
+  desiredMaxPsInput.addEventListener('input', updateCalculator);
+
+  // Initialize outputs blank
+  clearOutputs();
+</script>
+
+</body>
+</html>
