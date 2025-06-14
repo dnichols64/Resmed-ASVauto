@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ASVAuto Settings Calculator</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    max-width: 480px;
+  }
+  label {
+    display: block;
+    margin-top: 15px;
+  }
+  input[type="number"] {
+    width: 100px;
+    padding: 5px;
+    font-size: 1rem;
+  }
+  .output {
+    margin-top: 25px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    background-color: #f9f9f9;
+  }
+  .error {
+    color: red;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<h1>ASVAuto Settings Calculator</h1>
+
+<form id="asvForm" novalidate>
+  <label>
+    EPAP Min (4.0 - 15.0, step 0.2):
+    <input type="number" id="epapMin" step="0.2" min="4" max="15" value="4" />
+  </label>
+
+  <label>
+    EPAP Max (≥ EPAP Min, ≤ 15.0, step 0.2):
+    <input type="number" id="epapMax" step="0.2" min="4" max="15" value="15" />
+  </label>
+
+  <label>
+    PS Min (0 - 6):
+    <input type="number" id="psMin" step="1" min="0" max="6" value="0" />
+  </label>
+
+  <label>
+    PS Max (≥ PS Min, max depends on EPAP and PS Min):
+    <input type="number" id="psMax" step="1" min="0" max="20" value="6" />
+  </label>
+
+  <div class="error" id="errorMsg"></div>
+</form>
+
+<div class="output" id="output">
+  <h2>Actual Machine Settings:</h2>
+  <ul>
+    <li>EPAP Min: <span id="actualEpapMin"></span></li>
+    <li>EPAP Max: <span id="actualEpapMax"></span></li>
+    <li>PS Min: <span id="actualPsMin"></span></li>
+    <li>PS Max: <span id="actualPsMax"></span></li>
+  </ul>
+</div>
+
+<script>
+  const epapMinInput = document.getElementById('epapMin');
+  const epapMaxInput = document.getElementById('epapMax');
+  const psMinInput = document.getElementById('psMin');
+  const psMaxInput = document.getElementById('psMax');
+  const errorMsg = document.getElementById('errorMsg');
+  const actualEpapMin = document.getElementById('actualEpapMin');
+  const actualEpapMax = document.getElementById('actualEpapMax');
+  const actualPsMin = document.getElementById('actualPsMin');
+  const actualPsMax = document.getElementById('actualPsMax');
+
+  // Utility to round to nearest 0.2 for EPAP values
+  function roundToStep(value, step = 0.2) {
+    return Math.round(value / step) * step;
+  }
+
+  function validateAndCalculate() {
+    errorMsg.textContent = '';
+
+    let epapMin = parseFloat(epapMinInput.value);
+    let epapMax = parseFloat(epapMaxInput.value);
+    let psMin = parseInt(psMinInput.value, 10);
+    let psMax = parseInt(psMaxInput.value, 10);
+
+    // Round EPAP inputs to nearest 0.2
+    epapMin = roundToStep(epapMin);
+    epapMax = roundToStep(epapMax);
+
+    // Clamp EPAP inputs to allowed ranges
+    if (epapMin < 4) epapMin = 4;
+    if (epapMin > 15) epapMin = 15;
+    if (epapMax < 4) epapMax = 4;
+    if (epapMax > 15) epapMax = 15;
+
+    // EPAP Max cannot be less than EPAP Min
+    if (epapMax < epapMin) {
+      errorMsg.textContent = "EPAP Max cannot be less than EPAP Min.";
+      updateOutputs(null, null, null, null);
+      return;
+    }
+
+    // Clamp PS Min and Max to allowed ranges
+    if (psMin < 0) psMin = 0;
+    if (psMin > 6) psMin = 6;
+
+    // PS Max must be >= PS Min and ≤ 20 initially
+    if (psMax < psMin) {
+      errorMsg.textContent = "PS Max cannot be less than PS Min.";
+      updateOutputs(null, null, null, null);
+      return;
+    }
+    if (psMax > 20) psMax = 20;
+
+    /*
+      Apply machine-specific rules below based on your test results and logic:
+
+      - EPAP Min range: 4 to 15
+      - EPAP Max range: EPAP Min to 15
+      - If EPAP Min = EPAP Max = 15:
+          - PS Max fixed at 10
+          - PS Min range 0-5
+      - For other EPAP Min / Max combos, PS Max range depends on EPAP and PS Min.
+      - PS Min max is 6 generally.
+    */
+
+    // Adjust PS Max based on EPAP and PS Min
+
+    let psMaxMinLimit = psMin; // minimum allowed PS Max is PS Min
+
+    let psMaxMaxLimit = 20; // default max ps max
+
+    // Case: EPAP Min = EPAP Max = 15
+    if (epapMin === 15 && epapMax === 15) {
+      psMaxMaxLimit = 10;
+      if (psMin > 5) {
+        psMin = 5;
+        errorMsg.textContent = "When EPAP Min and Max are 15, PS Min max is 5.";
+      }
+    } else {
+      // For EPAP Min less than 15, ps max max limit varies (based on your testing examples)
+      // Using approximations from your tests:
+
+      if (psMin <= 2) {
+        if (epapMin >= 12) psMaxMaxLimit = 13;
+        else if (epapMin >= 10) psMaxMaxLimit = 15;
+        else psMaxMaxLimit = 20;
+      } else if (psMin <= 5) {
+        if (epapMin >= 12) psMaxMaxLimit = 13;
+        else if (epapMin >= 10) psMaxMaxLimit = 15;
+        else psMaxMaxLimit = 15;
+      } else {
+        // psMin 6
+        psMaxMaxLimit = 15; 
+      }
+    }
+
+    // Clamp PS Max within limits
+    if (psMax < psMaxMinLimit) psMax = psMaxMinLimit;
+    if (psMax > psMaxMaxLimit) {
+      psMax = psMaxMaxLimit;
+      if (!errorMsg.textContent) errorMsg.textContent = `PS Max capped at ${psMaxMaxLimit} based on EPAP and PS Min settings.`;
+    }
+
+    // Final values rounded to valid steps or integers
+    epapMin = roundToStep(epapMin);
+    epapMax = roundToStep(epapMax);
+    psMin = Math.round(psMin);
+    psMax = Math.round(psMax);
+
+    updateOutputs(epapMin, epapMax, psMin, psMax);
+  }
+
+  function updateOutputs(epapMin, epapMax, psMin, psMax) {
+    actualEpapMin.textContent = epapMin !== null ? epapMin.toFixed(1) : "-";
+    actualEpapMax.textContent = epapMax !== null ? epapMax.toFixed(1) : "-";
+    actualPsMin.textContent = psMin !== null ? psMin : "-";
+    actualPsMax.textContent = psMax !== null ? psMax : "-";
+  }
+
+  epapMinInput.addEventListener('input', () => {
+    // Keep EPAP Max min attribute synced with EPAP Min
+    let epapMinVal = parseFloat(epapMinInput.value);
+    if (!isNaN(epapMinVal)) {
+      epapMaxInput.min = epapMinVal.toFixed(1);
+      if (parseFloat(epapMaxInput.value) < epapMinVal) {
+        epapMaxInput.value = epapMinVal.toFixed(1);
+      }
+    }
+    validateAndCalculate();
+  });
+
+  epapMaxInput.addEventListener('input', () => {
+    validateAndCalculate();
+  });
+
+  psMinInput.addEventListener('input', () => {
+    let psMinVal = parseInt(psMinInput.value, 10);
+    if (!isNaN(psMinVal)) {
+      if (psMinVal > 6) psMinInput.value = 6;
+      if (psMinVal < 0) psMinInput.value = 0;
+
+      // Ensure PS Max min attribute synced with PS Min
+      psMaxInput.min = psMinInput.value;
+
+      if (parseInt(psMaxInput.value, 10) < psMinVal) {
+        psMaxInput.value = psMinInput.value;
+      }
+    }
+    validateAndCalculate();
+  });
+
+  psMaxInput.addEventListener('input', () => {
+    validateAndCalculate();
+  });
+
+  // Initialize output on load
+  validateAndCalculate();
+</script>
+
+</body>
+</html>
