@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ASVAuto Settings Calculator</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 500px;
+    margin: 40px auto;
+    padding: 0 15px;
+    background: #f9f9f9;
+  }
+  label {
+    display: block;
+    margin-top: 15px;
+    font-weight: bold;
+  }
+  input[type=number] {
+    width: 100px;
+    padding: 5px;
+    margin-top: 5px;
+  }
+  .result {
+    margin-top: 25px;
+    background: #fff;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 0 5px #ccc;
+  }
+  .error {
+    color: red;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<h2>ASVAuto Settings Calculator</h2>
+
+<form id="calcForm">
+  <label for="minEpap">Min EPAP (4.0 - 15.0)</label>
+  <input type="number" id="minEpap" step="0.2" min="4" max="15" value="4" />
+
+  <label for="maxEpap">Max EPAP (≥ Min EPAP, ≤ 15.0)</label>
+  <input type="number" id="maxEpap" step="0.2" min="4" max="15" value="15" />
+
+  <label for="minPs">Min PS (0 - 6, depends on max PS)</label>
+  <input type="number" id="minPs" step="0.2" min="0" max="6" value="0" />
+
+  <label for="maxPs">Max PS (depends on EPAP and Min PS, up to 20)</label>
+  <input type="number" id="maxPs" step="0.2" min="0" max="20" value="10" />
+
+  <div class="error" id="errorMsg"></div>
+</form>
+
+<div class="result" id="resultBox">
+  <h3>Actual Machine Values:</h3>
+  <p>Min EPAP: <span id="actualMinEpap"></span></p>
+  <p>Max EPAP: <span id="actualMaxEpap"></span></p>
+  <p>Min PS: <span id="actualMinPs"></span></p>
+  <p>Max PS: <span id="actualMaxPs"></span></p>
+</div>
+
+<script>
+  // Helper to round to nearest 0.2 increment
+  function roundStep(value, step = 0.2) {
+    return Math.round(value / step) * step;
+  }
+
+  const inputs = {
+    minEpap: document.getElementById('minEpap'),
+    maxEpap: document.getElementById('maxEpap'),
+    minPs: document.getElementById('minPs'),
+    maxPs: document.getElementById('maxPs'),
+  };
+
+  const outputs = {
+    actualMinEpap: document.getElementById('actualMinEpap'),
+    actualMaxEpap: document.getElementById('actualMaxEpap'),
+    actualMinPs: document.getElementById('actualMinPs'),
+    actualMaxPs: document.getElementById('actualMaxPs'),
+    errorMsg: document.getElementById('errorMsg'),
+  };
+
+  function validateAndCalculate() {
+    outputs.errorMsg.textContent = '';
+
+    let minEpap = roundStep(parseFloat(inputs.minEpap.value));
+    let maxEpap = roundStep(parseFloat(inputs.maxEpap.value));
+    let minPs = roundStep(parseFloat(inputs.minPs.value));
+    let maxPs = roundStep(parseFloat(inputs.maxPs.value));
+
+    // Basic range checks
+    if (minEpap < 4 || minEpap > 15) {
+      outputs.errorMsg.textContent = 'Min EPAP must be between 4 and 15.';
+      return;
+    }
+    if (maxEpap < minEpap || maxEpap > 15) {
+      outputs.errorMsg.textContent = 'Max EPAP must be between Min EPAP and 15.';
+      return;
+    }
+    if (minPs < 0 || minPs > 6) {
+      outputs.errorMsg.textContent = 'Min PS must be between 0 and 6.';
+      return;
+    }
+    if (maxPs < minPs || maxPs > 20) {
+      outputs.errorMsg.textContent = 'Max PS must be ≥ Min PS and ≤ 20.';
+      return;
+    }
+
+    // Additional logic from your tests:
+
+    // If min EPAP = max EPAP = 15, then max PS fixed at 10 and min PS max 5
+    if (minEpap === 15 && maxEpap === 15) {
+      if (maxPs !== 10) maxPs = 10;
+      if (minPs > 5) minPs = 5;
+    }
+
+    // Cap max PS based on min EPAP and min PS — example logic from your tests:
+    // (This is simplified; you can expand with your full detailed rules)
+    if (minEpap >= 12) {
+      if (maxPs > 13) maxPs = 13;
+    } else if (minEpap >= 10) {
+      if (maxPs > 15) maxPs = 15;
+    } else if (minEpap <= 6 && minPs >= 5) {
+      if (maxPs > 10) maxPs = 10;
+    }
+
+    // Update inputs to reflect actual machine values (rounded)
+    inputs.minEpap.value = minEpap.toFixed(1);
+    inputs.maxEpap.value = maxEpap.toFixed(1);
+    inputs.minPs.value = minPs.toFixed(1);
+    inputs.maxPs.value = maxPs.toFixed(1);
+
+    // Show results
+    outputs.actualMinEpap.textContent = minEpap.toFixed(1);
+    outputs.actualMaxEpap.textContent = maxEpap.toFixed(1);
+    outputs.actualMinPs.textContent = minPs.toFixed(1);
+    outputs.actualMaxPs.textContent = maxPs.toFixed(1);
+  }
+
+  // Attach input listeners to update on change
+  Object.values(inputs).forEach(input =>
+    input.addEventListener('input', validateAndCalculate)
+  );
+
+  // Initialize
+  validateAndCalculate();
+</script>
+
+</body>
+</html>
