@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ASVAuto Settings Calculator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 30px;
+      background: #f2f2f2;
+    }
+    .container {
+      max-width: 600px;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin: auto;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+    h2 {
+      margin-top: 0;
+      color: #333;
+    }
+    label {
+      display: block;
+      margin: 15px 0 5px;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      font-size: 1rem;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+    .results {
+      margin-top: 30px;
+      padding: 15px;
+      background: #e9ecef;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>ASVAuto Settings Calculator</h2>
+
+    <label for="epapMin">Desired Min EPAP</label>
+    <input type="number" id="epapMin" step="0.2" min="4" max="15" />
+
+    <label for="epapMax">Desired Max EPAP</label>
+    <input type="number" id="epapMax" step="0.2" min="4" max="15" />
+
+    <label for="psMin">Desired Min PS</label>
+    <input type="number" id="psMin" step="0.2" min="0" max="6" />
+
+    <label for="psMax">Desired Max PS</label>
+    <input type="number" id="psMax" step="0.2" min="0" max="20" />
+
+    <button onclick="calculate()">Calculate Actual Machine Values</button>
+
+    <div class="results" id="results"></div>
+  </div>
+
+  <script>
+    function calculate() {
+      const epapMin = parseFloat(document.getElementById('epapMin').value);
+      const epapMax = parseFloat(document.getElementById('epapMax').value);
+      const psMin = parseFloat(document.getElementById('psMin').value);
+      const psMax = parseFloat(document.getElementById('psMax').value);
+
+      // TODO: Replace with the real ASVAuto logic you confirmed earlier
+      let actualEpapMin = epapMin;
+      let actualEpapMax = Math.max(epapMin, epapMax);
+      let actualPsMin = psMin;
+      let actualPsMax = psMax;
+
+      // Add ASVAuto logic validation here (use your tested limits logic)
+
+      const output = `
+        <strong>Actual Machine Settings:</strong><br/>
+        Min EPAP: ${actualEpapMin.toFixed(1)}<br/>
+        Max EPAP: ${actualEpapMax.toFixed(1)}<br/>
+        Min PS: ${actualPsMin.toFixed(1)}<br/>
+        Max PS: ${actualPsMax.toFixed(1)}
+      `;
+
+      document.getElementById('results').innerHTML = output;
+    }
+  </script>
+</body>
+</html>
