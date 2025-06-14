@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ResMed ASVAuto Calculator</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 450px;
+    margin: 2rem auto;
+    padding: 1rem;
+    background: #f4f7f9;
+    color: #333;
+  }
+  h1 {
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+  label {
+    display: block;
+    margin-top: 1rem;
+    font-weight: bold;
+  }
+  input[type="text"] {
+    width: 100%;
+    font-size: 1rem;
+    padding: 0.4rem 0.5rem;
+    margin-top: 0.3rem;
+    box-sizing: border-box;
+  }
+  .result {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: #fff;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+  }
+  .error {
+    color: #a00;
+    font-weight: bold;
+  }
+  .valid {
+    color: green;
+  }
+  .small-note {
+    font-size: 0.9rem;
+    color: #666;
+    margin-top: 0.15rem;
+  }
+</style>
+</head>
+<body>
+  <h1>ResMed ASVAuto Calculator</h1>
+
+  <form id="asvForm" autocomplete="off" onsubmit="return false;">
+    <label for="desiredMinEpap">Desired Min EPAP (4.0 - 15.0)</label>
+    <input id="desiredMinEpap" name="desiredMinEpap" type="text" placeholder="e.g. 4.0, 4.2, 4.4" />
+
+    <label for="desiredMaxEpap">Desired Max EPAP (≥ Min EPAP, ≤ 15.0)</label>
+    <input id="desiredMaxEpap" name="desiredMaxEpap" type="text" placeholder="e.g. 10.0, 15.0" />
+
+    <label for="desiredMinPs">Desired Min PS (0.0 - 6.0)</label>
+    <input id="desiredMinPs" name="desiredMinPs" type="text" placeholder="e.g. 0, 2, 5" />
+
+    <label for="desiredMaxPs">Desired Max PS (≥ Min PS, max varies)</label>
+    <input id="desiredMaxPs" name="desiredMaxPs" type="text" placeholder="e.g. 10, 15, 20" />
+
+    <div style="margin-top: 1rem;">
+      <button type="button" onclick="calculateASV()">Calculate</button>
+    </div>
+  </form>
+
+  <div id="result" class="result" aria-live="polite" role="region"></div>
+
+<script>
+  function roundToStep(value, step = 0.2) {
+    return Math.round(value / step) * step;
+  }
+
+  function parseInput(value) {
+    // Replace comma with dot if user uses comma decimals
+    value = value.replace(',', '.');
+    let num = parseFloat(value);
+    return isNaN(num) ? null : num;
+  }
+
+  function calculateASV() {
+    const minEpapInput = document.getElementById('desiredMinEpap').value.trim();
+    const maxEpapInput = document.getElementById('desiredMaxEpap').value.trim();
+    const minPsInput = document.getElementById('desiredMinPs').value.trim();
+    const maxPsInput = document.getElementById('desiredMaxPs').value.trim();
+
+    const errors = [];
+    let output = '';
+
+    // Parse inputs
+    let minEpap = parseInput(minEpapInput);
+    let maxEpap = parseInput(maxEpapInput);
+    let minPs = parseInput(minPsInput);
+    let maxPs = parseInput(maxPsInput);
+
+    // Check if inputs are numbers
+    if (minEpap === null) errors.push('Desired Min EPAP must be a number.');
+    if (maxEpap === null) errors.push('Desired Max EPAP must be a number.');
+    if (minPs === null) errors.push('Desired Min PS must be a number.');
+    if (maxPs === null) errors.push('Desired Max PS must be a number.');
+
+    if (errors.length > 0) {
+      showErrors(errors);
+      return;
+    }
+
+    // Round EPAP values to nearest 0.2 step per your increments
+    minEpap = roundToStep(minEpap);
+    maxEpap = roundToStep(maxEpap);
+
+    // Validate EPAP ranges
+    if (minEpap < 4.0 || minEpap > 15.0) errors.push('Min EPAP must be between 4.0 and 15.0.');
+    if (maxEpap < minEpap || maxEpap > 15.0) errors.push('Max EPAP must be ≥ Min EPAP and ≤ 15.0.');
+
+    // Validate PS ranges
+    if (minPs < 0 || minPs > 6) errors.push('Min PS must be between 0 and 6.');
+    if (maxPs < minPs) errors.push('Max PS must be ≥ Min PS.');
+
+    // Now apply device logic constraints based on what you shared:
+
+    // Special rule: if minEpap == maxEpap == 15
+    if (minEpap === 15 && maxEpap === 15) {
+      if (maxPs !== 10) errors.push('When Min EPAP and Max EPAP are 15, Max PS is fixed at 10.');
+      if (minPs < 0 || minPs > 5) errors.push('When EPAP is fixed at 15, Min PS must be between 0 and 5.');
+    }
+
+    // Max PS caps vary by EPAP and Min PS ranges - simplified common rules based on your tests:
+    // If maxPs > 20, error (device max)
+    if (maxPs > 20) errors.push('Max PS cannot be greater than 20.');
+
+    // If maxPs is greater than device cap based on minEpap and minPs, cap it
+    // From your data, caps can be like: 
+    // epap 12 => max ps capped at 13
+    // epap 10 => max ps capped at 15
+    // epap 15 => max ps fixed at 10
+
+    let maxPsCap = 20; // default max cap
+    if (minEpap >= 15) maxPsCap = 10;
+    else if (minEpap >= 12) maxPsCap = 13;
+    else if (minEpap >= 10) maxPsCap = 15;
+
+    if (maxPs > maxPsCap) errors.push(`Max PS capped at ${maxPsCap} for Min EPAP of ${minEpap}.`);
+
+    // Final check for minPs and maxPs consistency with maxPsCap
+    if (minPs > maxPsCap) errors.push(`Min PS cannot be higher than Max PS cap (${maxPsCap}).`);
+
+    if (errors.length > 0) {
+      showErrors(errors);
+      return;
+    }
+
+    // If no errors, show actual machine values:
+    output += `<div class="valid">Machine Can Adjust To:</div>`;
+    output += `<ul>`;
+    output += `<li>Min EPAP: ${minEpap.toFixed(1)}</li>`;
+    output += `<li>Max EPAP: ${maxEpap.toFixed(1)}</li>`;
+    output += `<li>Min PS: ${minPs.toFixed(1)}</li>`;
+    output += `<li>Max PS: ${Math.min(maxPs, maxPsCap).toFixed(1)}</li>`;
+    output += `</ul>`;
+
+    document.getElementById('result').innerHTML = output;
+  }
+
+  function showErrors(errors) {
+    const resultDiv = document.getElementById('result');
+    let html = `<div class="error"><strong>Error(s):</strong><ul>`;
+    for (const e of errors) {
+      html += `<li>${e}</li>`;
+    }
+    html += '</ul></div>';
+    resultDiv.innerHTML = html;
+  }
+</script>
+
+</body>
+</html>
